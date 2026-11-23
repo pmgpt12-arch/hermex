@@ -1,0 +1,47 @@
+--- a/ConduitTests/MessageNormalizerTests.swift
++++ b/ConduitTests/MessageNormalizerTests.swift
+@@ -1785,6 +1785,44 @@
+         XCTAssertEqual(detail?.lanes.map(\.path), ["/work/app/.worktrees/voice-v2", nil])
+     }
+ 
++    func testNestedProjectLaneRetainsEmptyRegisteredParentFolder() {
++        let detail = MessageNormalizer.normalizeProjectSessions(
++            .object([
++                "project": .object([
++                    "id": .string("p_nsp"),
++                    "label": .string("NSP"),
++                    "repos": .array([
++                        .object([
++                            "label": .string("SEO"),
++                            "path": .string("/work/nsp/01. Site/SEO"),
++                            "groups": .array([
++                                .object([
++                                    "id": .string("seo"),
++                                    "label": .string("SEO"),
++                                    "path": .string("/work/nsp/01. Site/SEO"),
++                                    "sessions": .array([
++                                        .object(["id": .string("s1"), "title": .string("SEO smoke")])
++                                    ])
++                                ])
++                            ])
++                        ]),
++                        .object([
++                            "label": .string("01. Site"),
++                            "path": .string("/work/nsp/01. Site"),
++                            "groups": .array([])
++                        ])
++                    ])
++                ])
++            ]),
++            profile: "default"
++        )
++        XCTAssertEqual(detail?.lanes.count, 2)
++        XCTAssertEqual(detail?.lanes.first?.sessions.map(\.title), ["SEO smoke"])
++        XCTAssertEqual(detail?.lanes.last?.title, "01. Site")
++        XCTAssertEqual(detail?.lanes.last?.path, "/work/nsp/01. Site")
++        XCTAssertTrue(detail?.lanes.last?.sessions.isEmpty == true)
++    }
++
+     func testGeneratedSessionTitleIsNormalizedForDisplay() {
+         XCTAssertEqual(
+             AppState.normalizedGeneratedSessionTitle("Title: \"Plan a Garden\"\nAn explanation we should not show"),

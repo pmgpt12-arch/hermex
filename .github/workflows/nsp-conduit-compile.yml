@@ -1,0 +1,47 @@
+name: NSP Conduit Nested Folder Compile QA
+on:
+  push:
+    branches:
+      - nsp/conduit-qa
+permissions:
+  contents: read
+concurrency:
+  group: nsp-conduit-compile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  conduit-ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout QA patches
+        uses: actions/checkout@v4
+      - name: Checkout Conduit at shallow upstream HEAD
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth=1 --filter=blob:none --single-branch --branch main https://github.com/kaishi00/hermes-conduit.git conduit-src
+          echo "Conduit source SHA: $(git -C conduit-src rev-parse HEAD)"
+      - name: Verify and apply three NSP patches
+        run: |
+          set -euo pipefail
+          for patch in nsp-qa/conduit/000*.patch; do
+            git -C conduit-src apply --check "$GITHUB_WORKSPACE/$patch"
+            git -C conduit-src apply "$GITHUB_WORKSPACE/$patch"
+          done
+          git -C conduit-src diff --check
+      - name: Generate iOS project and compile
+        timeout-minutes: 21
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          if ! command -v xcodegen >/dev/null 2>&1; then brew install xcodegen; fi
+          cd conduit-src
+          xcodegen generate --spec project.yml
+          xcodebuild -project Conduit.xcodeproj -scheme Conduit -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$GITHUB_WORKSPACE/nsp-conduit-build.log"
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-nested-folders-compile-errors
+          path: nsp-conduit-build.log
+          if-no-files-found: ignore

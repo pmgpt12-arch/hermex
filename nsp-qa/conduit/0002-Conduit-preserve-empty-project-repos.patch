@@ -1,0 +1,29 @@
+--- a/Conduit/Services/HermesClient.swift
++++ b/Conduit/Services/HermesClient.swift
+@@ -5968,6 +5968,8 @@
+         for repo in repos {
+             let repoObject = repo.objectValue ?? [:]
+             let repoLabel = firstNonEmptyString([repoObject["label"], repoObject["path"]]) ?? AppLocalization.string("Workspace")
++            let repoPath = firstNonEmptyString([repoObject["path"]])
++            let laneCountBeforeRepo = lanes.count
+             for group in repoObject["groups"]?.arrayValue ?? [] {
+                 let groupObject = group.objectValue ?? [:]
+                 let groupID = groupObject["id"]?.stringValue ?? UUID().uuidString
+@@ -5980,6 +5982,17 @@
+                     title: multipleRepos ? "\(repoLabel) · \(groupLabel)" : groupLabel,
+                     sessions: sessions,
+                     path: groupPath == groupLabel ? nil : groupPath
++                ))
++            }
++            // Keep an explicitly reported work folder even when it has no
++            // chat rows. Otherwise its populated descendants cannot be shown
++            // beneath it in the project's nested tree.
++            if lanes.count == laneCountBeforeRepo, let repoPath {
++                lanes.append(ProjectSessionLane(
++                    id: "\(id)-empty-\(repoPath)",
++                    title: repoLabel,
++                    sessions: [],
++                    path: repoPath
+                 ))
+             }
+         }

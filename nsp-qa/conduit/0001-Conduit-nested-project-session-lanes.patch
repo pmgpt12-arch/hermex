@@ -1,0 +1,114 @@
+--- a/Conduit/Views/V2/V2ProjectPage.swift
++++ b/Conduit/Views/V2/V2ProjectPage.swift
+@@ -155,7 +155,51 @@
+     }
+ 
+     private var lanes: [ProjectSessionLane] {
+-        ProjectAcrossProfiles.lanes(profileParts, filter: shownFilter)
++        let merged = ProjectAcrossProfiles.lanes(profileParts, filter: shownFilter)
++        // Keep the active profile's registered empty folders in All-profiles
++        // mode: ProjectAcrossProfiles intentionally filters empty lanes.
++        guard shownFilter == nil, profileParts.count > 1 else { return merged }
++        var seenPaths = Set(merged.compactMap(hierarchyPath))
++        let originals = profileParts.first?.lanes ?? []
++        let missing = originals.filter { lane in
++            guard let path = hierarchyPath(lane) else { return false }
++            return seenPaths.insert(path).inserted
++        }
++        return merged + missing
++    }
++
++    // A project lane may be contained inside another registered work folder.
++    // Derive hierarchy from exact path segments, preserving Hermes lane/session IDs.
++    private func hierarchyPath(_ lane: ProjectSessionLane) -> String? {
++        guard let raw = lane.path?.trimmingCharacters(in: .whitespacesAndNewlines),
++              !raw.isEmpty else { return nil }
++        let segments = raw.split(separator: "/").map(String.init)
++        guard !segments.isEmpty else { return nil }
++        return (raw.hasPrefix("/") ? "/" : "") + segments.joined(separator: "/")
++    }
++
++    private func parentLaneID(for lane: ProjectSessionLane) -> String? {
++        guard let childPath = hierarchyPath(lane) else { return nil }
++        return lanes.compactMap { candidate -> (id: String, length: Int)? in
++            guard candidate.id != lane.id,
++                  let parentPath = hierarchyPath(candidate),
++                  childPath.hasPrefix(parentPath + "/") else { return nil }
++            return (candidate.id, parentPath.count)
++        }.max(by: { $0.length < $1.length })?.id
++    }
++
++    private var rootLanes: [ProjectSessionLane] {
++        lanes.filter { parentLaneID(for: $0) == nil }
++    }
++
++    private func childLanes(of parent: ProjectSessionLane) -> [ProjectSessionLane] {
++        lanes.filter { parentLaneID(for: $0) == parent.id }
++    }
++
++    private func visibleSessionCount(for lane: ProjectSessionLane) -> Int {
++        lane.sessions.count + childLanes(of: lane).reduce(0) {
++            $0 + visibleSessionCount(for: $1)
++        }
+     }
+ 
+     var body: some View {
+@@ -179,7 +223,7 @@
+                         .frame(maxWidth: .infinity, minHeight: 140)
+                         .listRowBackground(Color.clear)
+                         .listRowSeparator(.hidden)
+-                } else if detail != nil, lanes.allSatisfy({ $0.sessions.isEmpty }) {
++                } else if detail != nil, lanes.isEmpty {
+                     ContentUnavailableView {
+                         Label("No Conversations", systemImage: "tray")
+                     } description: {
+@@ -195,8 +239,8 @@
+                     .listRowSeparator(.hidden)
+                 } else if detail != nil || !lanes.isEmpty {
+                     // Another profile's chats show though this one's read failed.
+-                    ForEach(lanes) { lane in
+-                        laneRows(lane)
++                    ForEach(rootLanes) { lane in
++                        laneRows(lane, depth: 0)
+                     }
+                 } else {
+                     ContentUnavailableView {
+@@ -352,7 +396,7 @@
+     // MARK: - Lanes
+ 
+     @ViewBuilder
+-    private func laneRows(_ lane: ProjectSessionLane) -> some View {
++    private func laneRows(_ lane: ProjectSessionLane, depth: Int) -> some View {
+         let isCollapsed = collapsedLanes.contains(lane.id)
+         Button {
+             Haptics.light()
+@@ -382,11 +426,12 @@
+                         .truncationMode(.head)
+                 }
+                 Spacer(minLength: 6)
+-                Text(String(lane.sessions.count))
++                Text(String(visibleSessionCount(for: lane)))
+                     .scaledFont(.footnote.monospacedDigit())
+                     .foregroundStyle(.secondary)
+             }
+             .padding(.horizontal, 16)
++            .padding(.leading, CGFloat(depth) * 16)
+             .frame(minHeight: 40)
+             .contentShape(Rectangle())
+         }
+@@ -394,11 +439,14 @@
+         .dynamicTypeSize(...DynamicTypeSize.listRowCap)
+         .accessibilityLabel(Text([lane.title, lanePath(lane)].compactMap { $0 }.joined(separator: ", ")))
+         .accessibilityValue(Text(AppLocalization.string(isCollapsed ? "Collapsed" : "Expanded")))
+-        .accessibilityHint(Text(AppLocalization.string("\(lane.sessions.count) sessions")))
++        .accessibilityHint(Text(AppLocalization.string("\(visibleSessionCount(for: lane)) sessions")))
+         .accessibilityAddTraits(.isHeader)
+         .v2ListRow(divider: isCollapsed, dividerInset: 16)
+ 
+         if !isCollapsed {
++            ForEach(childLanes(of: lane)) { child in
++                AnyView(laneRows(child, depth: depth + 1))
++            }
+             // Two profiles' chats can share an id: each row is its profile's.
+             ForEach(Array(lane.sessions.enumerated()), id: \.element.projectPageRowID) { index, session in
+                 V2ProjectSessionRow(
