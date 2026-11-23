@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   conduit-ios-simulator:
-    runs-on: macos-15-intel
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - name: Checkout QA patches
