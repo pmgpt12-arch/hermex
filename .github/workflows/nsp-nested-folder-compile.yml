@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ios-simulator-compile:
-    runs-on: macos-15-intel
+    runs-on: xcode-27
     timeout-minutes: 25
     steps:
       - name: Checkout
