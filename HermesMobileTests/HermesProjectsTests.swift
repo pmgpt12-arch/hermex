@@ -21,6 +21,26 @@ import Observation
         super.tearDown()
     }
 
+    func testProjectTreeKeepsNestedRepositoryPaths() {
+        let reply: BotJSON = .object([
+            "projects": .array([
+                .object([
+                    "id": .string("p_nsp"),
+                    "label": .string("NSP"),
+                    "path": .string("/work/nsp-main"),
+                    "repos": .array([
+                        .object(["path": .string("/work/nsp/01. Site")]),
+                        .object(["path": .string("/work/nsp/01. Site/SEO")])
+                    ])
+                ])
+            ])
+        ])
+        let projects = HermesProjectTree(reply: reply)
+        XCTAssertEqual(projects.projects.first?.hermes?.folderPaths, [
+            "/work/nsp/01. Site", "/work/nsp/01. Site/SEO"
+        ])
+    }
+
     func testLanesAreTheHostsProjectsWithoutNoProject() async throws {
         let host = BotSocketHost()
         let connection = host.connection(record)

@@ -733,6 +733,9 @@ struct SessionListView: View {
                     ? navigationState.selectedSessionID
                     : nil,
                 actions: sessionRowActions(),
+                projectFolders: selectedProjectID.flatMap { id in
+                    viewModel.projects.first(where: { $0.id == id })?.hermes?.folderPaths
+                } ?? [],
                 suppressEmptyState: !groups.scheduled.isEmpty
             )
 

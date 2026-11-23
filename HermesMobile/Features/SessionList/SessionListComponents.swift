@@ -790,8 +790,92 @@ struct SessionListRowsSection: View {
     let showsWorkspace: Bool
     let selectedSessionID: String?
     let actions: SessionListRowActions
+    var projectFolders: [String] = []
     var suppressEmptyState = false
     var showsErrorOverRows = false
+    @State private var collapsedWorkspaceFolders: Set<String> = []
+
+    private struct WorkspaceFolder: Identifiable {
+        let id: String
+        let title: String
+        let depth: Int
+        let sessions: [SessionSummary]
+        let totalCount: Int
+    }
+
+    private static func canonicalFolder(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        let parts = raw.split(separator: "/").map(String.init)
+        guard !parts.isEmpty, !parts.contains("..") else { return nil }
+        return (raw.hasPrefix("/") ? "/" : "") + parts.joined(separator: "/")
+    }
+
+    private static func closestFolder(_ cwd: String?, among paths: [String]) -> String? {
+        guard let cwd = canonicalFolder(cwd) else { return nil }
+        return paths.filter { cwd == $0 || cwd.hasPrefix($0 + "/") }
+            .max(by: { $0.count < $1.count })
+    }
+
+    private var workspaceFolderPaths: [String] {
+        let declared = projectFolders.compactMap(Self.canonicalFolder)
+        let workspaces = sessions.compactMap { Self.canonicalFolder($0.workspace) }
+            .filter { Self.closestFolder($0, among: declared) != nil }
+        return Array(Set(declared + workspaces))
+    }
+
+    private var folderRows: [WorkspaceFolder] {
+        let paths = workspaceFolderPaths
+        var direct: [String: [SessionSummary]] = [:]
+        for session in sessions {
+            if let folder = Self.closestFolder(session.workspace, among: paths) {
+                direct[folder, default: []].append(session)
+            }
+        }
+        func parent(_ path: String) -> String? {
+            paths.filter { path != $0 && path.hasPrefix($0 + "/") }
+                .max(by: { $0.count < $1.count })
+        }
+        func children(_ path: String) -> [String] {
+            paths.filter { parent($0) == path }
+                .sorted { String($0.split(separator: "/").last ?? "") < String($1.split(separator: "/").last ?? "") }
+        }
+        func total(_ path: String) -> Int {
+            (direct[path]?.count ?? 0) + children(path).reduce(0) { $0 + total($1) }
+        }
+        var result: [WorkspaceFolder] = []
+        func visit(_ path: String, _ depth: Int) {
+            result.append(WorkspaceFolder(
+                id: path,
+                title: String(path.split(separator: "/").last ?? ""),
+                depth: depth,
+                sessions: direct[path] ?? [],
+                totalCount: total(path)
+            ))
+            guard !collapsedWorkspaceFolders.contains(path) else { return }
+            for child in children(path) { visit(child, depth + 1) }
+        }
+        let roots = paths.filter { parent($0) == nil }
+            .sorted { String($0.split(separator: "/").last ?? "") < String($1.split(separator: "/").last ?? "") }
+        for root in roots { visit(root, 0) }
+        return result
+    }
+
+    private var sessionsOutsideFolders: [SessionSummary] {
+        let paths = workspaceFolderPaths
+        return sessions.filter { Self.closestFolder($0.workspace, among: paths) == nil }
+    }
+
+    private func sessionRow(_ session: SessionSummary) -> some View {
+        SessionInteractiveRow(
+            viewModel: viewModel,
+            session: session,
+            showsMessageCount: showsMessageCount,
+            showsWorkspace: showsWorkspace,
+            selectedSessionID: selectedSessionID,
+            actions: actions,
+            searchText: searchText
+        )
+    }
 
     var body: some View {
         sessionsHeaderRow
@@ -808,7 +892,7 @@ struct SessionListRowsSection: View {
         } else if let errorMessage = viewModel.errorMessage, viewModel.sessions.isEmpty {
             sessionsErrorRow(message: errorMessage)
                 .sessionsScreenListRow()
-        } else if sessions.isEmpty && !suppressEmptyState {
+        } else if sessions.isEmpty && projectFolders.isEmpty && !suppressEmptyState {
             SessionListStatusRow(
                 title: emptyTitle,
                 description: emptyDescription,
@@ -816,17 +900,43 @@ struct SessionListRowsSection: View {
             )
                 .padding(.horizontal, 24)
                 .sessionsScreenListRow()
+        } else if !projectFolders.isEmpty && !isSearchActive {
+            ForEach(folderRows) { folder in
+                Button {
+                    if collapsedWorkspaceFolders.contains(folder.id) {
+                        collapsedWorkspaceFolders.remove(folder.id)
+                    } else {
+                        collapsedWorkspaceFolders.insert(folder.id)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: collapsedWorkspaceFolders.contains(folder.id) ? "chevron.right" : "chevron.down")
+                        Image(systemName: "folder")
+                        Text(folder.title)
+                        Spacer()
+                        Text(String(folder.totalCount))
+                    }
+                    .foregroundStyle(.appPrimary)
+                    .padding(.horizontal, 24)
+                    .padding(.leading, CGFloat(folder.depth) * 14)
+                    .frame(minHeight: 38)
+                }
+                .buttonStyle(.plain)
+                .sessionsScreenListRow()
+
+                if !collapsedWorkspaceFolders.contains(folder.id) {
+                    ForEach(folder.sessions) { session in
+                        sessionRow(session)
+                            .padding(.leading, CGFloat(folder.depth + 1) * 14)
+                    }
+                }
+            }
+            ForEach(sessionsOutsideFolders) { session in
+                sessionRow(session)
+            }
         } else {
             ForEach(sessions) { session in
-                SessionInteractiveRow(
-                    viewModel: viewModel,
-                    session: session,
-                    showsMessageCount: showsMessageCount,
-                    showsWorkspace: showsWorkspace,
-                    selectedSessionID: selectedSessionID,
-                    actions: actions,
-                    searchText: searchText
-                )
+                sessionRow(session)
             }
         }
     }

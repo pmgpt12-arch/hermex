@@ -180,6 +180,9 @@ struct HermesSessionListView: View {
                 showsWorkspace: showsWorkspace,
                 selectedSessionID: usesSplit ? selectedSessionID : nil,
                 actions: actions,
+                projectFolders: selectedProjectID.flatMap { id in
+                    viewModel.projects.first(where: { $0.id == id })?.hermes?.folderPaths
+                } ?? [],
                 suppressEmptyState: !groups.scheduled.isEmpty || !groups.needsYou.isEmpty,
                 showsErrorOverRows: true
             )

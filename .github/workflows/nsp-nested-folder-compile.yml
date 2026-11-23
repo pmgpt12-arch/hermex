@@ -1,0 +1,30 @@
+name: NSP Nested Folder Compile QA
+on:
+  push:
+    branches:
+      - nsp/nested-folders-qa
+permissions:
+  contents: read
+concurrency:
+  group: nsp-nested-folders-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios-simulator-compile:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify toolchain and build project
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcodebuild -project HermesMobile.xcodeproj -scheme HermesMobile -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -quiet CODE_SIGNING_ALLOWED=NO build 2>&1 | tee nsp-build.log
+      - name: Upload compile diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nsp-ios-build-errors
+          path: nsp-build.log
+          if-no-files-found: ignore

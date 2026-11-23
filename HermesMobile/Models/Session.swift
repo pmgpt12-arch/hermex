@@ -100,6 +100,7 @@ struct ProjectSummary: Decodable, Equatable, Hashable, Identifiable {
         let isAutomatic: Bool
         let sessionCount: Int
         let claimedCount: Int
+        var folderPaths: [String] = []
     }
 
     var id: String { projectId ?? name ?? UUID().uuidString }

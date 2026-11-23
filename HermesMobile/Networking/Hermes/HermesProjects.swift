@@ -15,12 +15,15 @@ struct HermesProjectTree: Equatable {
             let sessionIDs = (node["sessionIds"].list ?? []).compactMap(\.text).filter { !$0.isEmpty }
             for sessionID in sessionIDs where owners[sessionID] == nil { owners[sessionID] = id }
             let isAutomatic = node["isAuto"].flag == true
+            let folderPaths = (node["repos"].list ?? []).compactMap { $0["path"].text }
+                .filter { !$0.isEmpty }
             let project = ProjectSummary(
                 projectId: id, name: node["label"].text.flatMap { $0.isEmpty ? nil : $0 } ?? id,
                 color: node["color"].text.flatMap { $0.isEmpty ? nil : $0 },
                 hermes: ProjectSummary.Hermes(
                     folder: node["path"].text.flatMap { $0.isEmpty ? nil : $0 }, isAutomatic: isAutomatic,
-                    sessionCount: node["sessionCount"].integer ?? sessionIDs.count, claimedCount: sessionIDs.count
+                    sessionCount: node["sessionCount"].integer ?? sessionIDs.count, claimedCount: sessionIDs.count,
+                    folderPaths: folderPaths
                 )
             )
             if isAutomatic { automatic.append(project) } else { user.append(project) }
