@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          xcodebuild -project HermesMobile.xcodeproj -scheme HermesMobile -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -quiet CODE_SIGNING_ALLOWED=NO build 2>&1 | tee nsp-build.log
+          xcodebuild -project HermesMobile.xcodeproj -scheme HermesMobile -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -quiet CODE_SIGNING_ALLOWED=NO ASSETCATALOG_COMPILER_APPICON_NAME=AppIconLight build 2>&1 | tee nsp-build.log
       - name: Upload compile diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
